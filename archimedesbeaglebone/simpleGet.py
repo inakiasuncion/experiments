@@ -1,11 +1,35 @@
-import threading, cv, cv2
+import threading, cv, cv2, operator, collections
 #from PIL import Image
 import math
 import Image
 from time import sleep
 
 SHOULD_LEAVE_DATA_THREAD = False
-
+LevelArray = {  1436: 10,
+                1430: 10.5,
+                1421: 11,
+                1413: 11.5,
+                1410: 12,
+                1406: 12.5,
+                1403: 13,
+                1395: 13.5,
+                1390: 14,
+                1375: 14.5,
+                1368: 15,
+                1365: 15.5,
+                1360: 16,
+                1355: 16.5,
+                1349: 17,
+                1340: 17.5,
+                1321: 18,
+                1312: 18.5,
+                1305: 19,
+                1300: 19.5,
+                1286: 20,
+                1280: 20.5,
+                1273: 21
+            }
+LevelArray = collections.OrderedDict(sorted(LevelArray.items(), key=lambda t: t[0]))
 
 def t_data_thread():
     global SHOULD_LEAVE_DATA_THREAD
@@ -17,7 +41,7 @@ def t_data_thread():
         SHOULD_LEAVE_DATA_THREAD = False
         while not SHOULD_LEAVE_DATA_THREAD:
             medida = load.read()
-            medidagr = round(((int(medida) - 89.00) * 0.059), 2)
+            medidagr = round(((int(medida) - 89.00) * 0.049175412), 2)
             load.seek(0)
             write = str(i) + ":" + str(medidagr) + "\n"
             register.write(write)
@@ -194,6 +218,7 @@ def downthread():
         slowfile.write("16\n")
         slowfile.close()
 
+        sleep(0.5)
         print "Terminar el hilo de registro"
         global SHOULD_LEAVE_DATA_THREAD
         SHOULD_LEAVE_DATA_THREAD = True
@@ -204,90 +229,6 @@ def downthread():
     except:
         print 'DOWN NOT DONE'
         return
-
-
-def slowthread():
-    try:
-        #Proceso que subira la bola
-        #comprobar si esta en uso el motor
-        print "dentro del hilo de DOWN-Slow"
-
-        slowfile = open('/opt/restlite/slow', 'w+')
-        i = slowfile.read()
-        j = int(i)
-        print "La variable en el archivo de control tiene" + i
-        if (j < 15):
-            j = j + 1
-            slowfile.write(j + "\n")
-        else:
-            slowfile.close()
-            return
-
-        slowfile.close()
-
-        using = open('/opt/restlite/using', 'r+')
-        i = using.read()
-        using.seek(0)
-        if ('1' in i):
-            using.close()
-            print 'Motor is using'
-            return
-
-        using.write('1')
-        using.seek(0)
-
-        #comprobar si esta arriba o abajo
-        updown = open('/opt/restlite/updown', 'r+')
-        updown.write('0')
-        updown.close()
-
-        #Definiendo el sentido del Motor
-        #GPIO 39
-        print 'GPIO 39 value: 0'
-        m0 = open('/sys/class/gpio/gpio39/value', 'w')
-        m0.write('0')
-        m0.close()
-        #GPIO 38
-        print 'GPIO 38 value: 1'
-        m1 = open('/sys/class/gpio/gpio38/value', 'w')
-        m1.write('1')
-        m1.close()
-
-        #ACTIVANDO EL MOTOR
-        run = open('/sys/devices/ocp.3/pwm_test_P8_46.10/run', 'w')
-        run.write('1')
-        run.close()
-        print 'PWM Runing - Going DOWN'
-
-        #mientras no se den las vueltas necesarias
-        hall = open('/sys/class/gpio/gpio66/value', 'r')
-        for vueltas in range(0, 5):
-            i = hall.read()
-            hall.seek(0)
-            while '1' in i:
-                i = hall.read()
-                hall.seek(0)
-            print 'Hall is 1'
-
-            while '0' in i:
-                i = hall.read()
-                hall.seek(0)
-            print 'Hall is 0'
-            print vueltas
-
-        run = open('/sys/devices/ocp.3/pwm_test_P8_46.10/run', 'w')
-        run.write('0')
-        run.close()
-
-        using.write('0')
-        using.close()
-
-        print 'DOWNSLOW DONE'
-        return
-    except:
-        print 'DOWNSLOW NOT DONE'
-        return
-
 
 def imagethread(ruta):
     try:
@@ -317,7 +258,6 @@ def imagethread(ruta):
     except:
         print 'PHOTO NOT DONE'
         return
-
 
 def prexecute():
     #Configuracion del PWM
@@ -413,7 +353,8 @@ def load(env, start_response):
         #totval = level.read()
         loadm.close()
         totval = totval / (med + 1)
-        #print totval
+        print totval
+        totval = round (((totval - 89) * 0.049175412), 2)
         return 'TOTAL_LOAD=' + str(totval)
     except:
         #		raise restlite.Status, '400 Error capturing level'
@@ -422,6 +363,7 @@ def load(env, start_response):
 
 def level(env, start_response):
     #start_response('200 OK', [('Content-Type', 'text/plain')])
+    global LevelArray
     level = open('/sys/devices/ocp.3/helper.11/AIN4', 'r')
 
     totval = 0
@@ -436,7 +378,20 @@ def level(env, start_response):
         #totval = level.read()
         level.close()
         totval = totval / (med + 1)
-        #print totval
+        print "Valor del sensor: " + str(totval) + "<<-----"
+
+        #print LevelArray
+        #voltajes = LevelArray.keys()
+        #print voltajes
+        #valores = LevelArray.values()
+        #print valores
+
+        #centim = LevelArray.values()
+        for valores in LevelArray:
+            print valores
+        #    print voltaje
+
+        totval = round(((8 - ((totval - 935)/85)) * 2.54), 2)
         return 'WATERLEVEL=' + str(totval)
     except:
         #		raise restlite.Status, '400 Error capturing level'
@@ -457,12 +412,13 @@ def plotload(env, start_response):
 
 def plotlevel(env, start_response):
     start_response('200 OK', [('Content-Type', 'text/plain')])
-
+    return "PLOT FUNCTION"
 
 def object(env, start_response):
     #start_response('200 OK', [('Content-Type', 'text/plain')])
     nombre = "PingPong ball fill off Water"
     try:
+        upthread()
         radio = 4
         volumen = round((4.00 / 3.00) * math.pi * (radio ** 3.00), 2)
         masa = load(env, start_response)
@@ -482,6 +438,7 @@ def liquid(env, start_response):
     #start_response('200 OK', [('Content-Type', 'text/plain')])
     nombre = "Colored Water"
     try:
+        upthread()
         radio = 6.5
         densidad = 1
         altura = level(env, start_response)
